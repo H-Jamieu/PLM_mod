@@ -12,11 +12,12 @@ from utils.utils_algo import accuracy_check, get_paths, init_gpuseed
 from utils.utils_algo import get_scheduler
 from utils.utils_data import get_origin_datasets, indices_split, generate_noise_labels, get_transform, \
     get_cantar_dataset, BalancedSampler
+from utils.Noisy_ostracods import Noisy_ostracods
 
 
 def main(args, paths):
     # seed and device
-    device = torch.device("cuda:" + args.gpu if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda:0")
     init_gpuseed(args.seed, device)
 
     # transform
@@ -101,6 +102,7 @@ def main(args, paths):
 
     print("----------------Train----------------")
     if args.ds == 'clothing1m':
+        # for noisy ostracods, the BalancedSampler can not be used
         b_sampler = BalancedSampler(num_classes, np.array(noise_labels[train_indices]))
     Tloss_val_best = 10000.0
     pre_acc_val = 0.0
@@ -113,6 +115,16 @@ def main(args, paths):
                                                targets=noise_labels,
                                                transformations=val_transform,
                                                indices=term_indices,
+                                               return_index=True)
+            train_loader = torch.utils.data.DataLoader(dataset=train_dataset, batch_size=args.bs, shuffle=True,
+                                                       num_workers=args.num_workers, pin_memory=True,
+                                                       persistent_workers=True)
+        if args.ds == 'noisy_ostracods':
+            train_dataset = get_cantar_dataset(dataset=ordinary_train_dataset,
+                                               candidate_labels=train_candidate_labels,
+                                               targets=noise_labels,
+                                               transformations=val_transform,
+                                               indices=None,
                                                return_index=True)
             train_loader = torch.utils.data.DataLoader(dataset=train_dataset, batch_size=args.bs, shuffle=True,
                                                        num_workers=args.num_workers, pin_memory=True,
@@ -232,6 +244,16 @@ def main(args, paths):
             train_loader = torch.utils.data.DataLoader(dataset=train_dataset, batch_size=args.bs, shuffle=True,
                                                        num_workers=args.num_workers, pin_memory=True,
                                                        persistent_workers=True)
+        if args.ds == 'noisy_ostracods':
+            train_dataset = get_cantar_dataset(dataset=ordinary_train_dataset,
+                                               candidate_labels=train_candidate_labels,
+                                               targets=noise_labels,
+                                               transformations=val_transform,
+                                               indices=None,
+                                               return_index=True)
+            train_loader = torch.utils.data.DataLoader(dataset=train_dataset, batch_size=args.bs, shuffle=True,
+                                                       num_workers=args.num_workers, pin_memory=True,
+                                                       persistent_workers=True)
         model.train()
         for images, candidate_labels, noise_targets, indices in train_loader:
             images = images.to(device, non_blocking=True)
@@ -298,22 +320,22 @@ if __name__ == '__main__':
                         required=False)
     parser.add_argument('--ep', help='number of epochs', type=int, default=50,
                         required=False)
-    parser.add_argument('--ds', help='specify a dataset', default='cifar-10', type=str,
+    parser.add_argument('--ds', help='specify a dataset', default='noisy_ostracods', type=str,
                         choices=['mnist', 'cifar-10', 'cifar-100', 'clothing1m'],
                         required=False)
-    parser.add_argument('--mo', help='models name', default='resnet34',
+    parser.add_argument('--mo', help='models name', default='resnet50',
                         choices=['resnet', 'resnet34', 'resnet50', 'lenet'],
                         type=str, required=False)
     parser.add_argument('--data_gen', help='data generate strategy', default='pair',
                         choices=['symmetry', 'pair', 'idn'],
                         type=str, required=False)
-    parser.add_argument('--gpu', help='used gpu id', default='1', type=str, required=False)
+    parser.add_argument('--gpu', help='used gpu id', default='0', type=str, required=False)
     parser.add_argument('--flip_rate', help='noise flip rate', type=float, default=0.4, required=False)
     parser.add_argument('--seed', help='Random seed', default=40, type=int, required=False)
     parser.add_argument('--crop_ratio', help='crop ratio', type=float, default=0.8, required=False)
     parser.add_argument('--save_dir', help='results dir', default='./res', type=str, required=False)
     parser.add_argument('--data_root', help='data dir', default='~/data', type=str, required=False)
-    parser.add_argument('--num_workers', help='num worker', default=12, type=int, required=False)
+    parser.add_argument('--num_workers', help='num worker', default=16, type=int, required=False)
     args = parser.parse_args()
 
     if args.ds == 'cifar-10':
@@ -359,6 +381,19 @@ if __name__ == '__main__':
         args.mo = 'resnet50'
         args.filter_outlier = True
         args.anchors_per_class = 10
+    
+    if args.ds == 'Noisy_ostracods':
+        args.bs = 256
+        args.lr = 0.0256
+        args.wd = 1e-3
+        args.ep = 15
+        args.pre_ep = 15
+        args.crop_ratio = 0.7
+        args.mo = 'resnet50'
+        args.filter_outlier = True
+        # as noisy ostracods may have classes with only one sample, we set anchors_per_class to 1
+        args.anchors_per_class = 1
+
 
     paths = get_paths(args)
     start_time = time.time()

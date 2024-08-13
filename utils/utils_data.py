@@ -8,6 +8,7 @@ from numpy.testing import assert_array_almost_equal
 from sklearn.model_selection import KFold
 
 from utils.clothing1M import Clothing1M
+from utils.Noisy_ostracods import Noisy_ostracods
 from utils.custom_dataset import NoiseDataset, CandidateDateset
 
 mean, std, crop_size = {}, {}, {}
@@ -15,6 +16,7 @@ mean['cifar-10'] = [x / 255 for x in [125.3, 123.0, 113.9]]
 mean['mnist'] = [0.1307]
 mean['cifar-100'] = [0.5071, 0.4867, 0.4408]
 mean['clothing1m'] = [0.485, 0.456, 0.406]
+mean['noisy_ostracods'] = [0.485, 0.456, 0.406]
 # mean['clothing1m'] = [0.7215, 0.6846, 0.6679]
 # mean['clothing1m'] = [0.6960, 0.6544, 0.6379]
 
@@ -22,6 +24,7 @@ std['cifar-10'] = [x / 255 for x in [63.0, 62.1, 66.7]]
 std['mnist'] = [0.3081]
 std['cifar-100'] = [0.2675, 0.2565, 0.2761]
 std['clothing1m'] = [0.229, 0.224, 0.225]
+std['noisy_ostracods'] = [0.229, 0.224, 0.225]
 # std['clothing1m'] = [0.3021, 0.3123, 0.3167]
 # std['clothing1m'] = [0.3085, 0.3170, 0.3189]
 
@@ -29,6 +32,7 @@ crop_size['cifar-10'] = 32
 crop_size['mnist'] = 28
 crop_size['cifar-100'] = 32
 crop_size['clothing1m'] = 224
+crop_size['noisy_ostracods'] = 224
 
 
 def vectorized_choice(p, items):
@@ -125,6 +129,21 @@ def get_transform(dataname, train=True):
                 transforms.ToTensor(),
                 transforms.Normalize(mean_, std_)
             ])
+        elif dataname in ['noisy_ostracods']:
+            data_transforms = transforms.Compose([transforms.Resize([224, 224]),
+                                          transforms.RandomChoice([transforms.RandomRotation([90, 90]),
+                                                                   transforms.RandomRotation([180, 180]),
+                                                                   transforms.RandomRotation([270, 270])],
+                                                                  p=[0.25, 0.25, 0.25]),
+                                          transforms.RandomHorizontalFlip(p=0.5),
+                                          transforms.RandomChoice([transforms.ColorJitter(brightness=0.5),
+                                                                   transforms.ColorJitter(brightness=0.5, hue=0.1)],
+                                                                  p=[0.3, 0.3]),
+                                          transforms.RandomGrayscale(0.5),
+                                          transforms.ToTensor(),
+                                          transforms.Normalize(
+                                              mean=[0.485, 0.456, 0.406],
+                                              std=[0.229, 0.224, 0.225])])
         else:
             raise ValueError('Invalid Transform')
     else:
@@ -133,6 +152,13 @@ def get_transform(dataname, train=True):
                 # transforms.Resize(256),
                 transforms.Resize([256, 256]),
                 transforms.CenterCrop(crop_size_),
+                transforms.ToTensor(),
+                transforms.Normalize(mean_, std_)
+            ])
+        if dataname == 'noisy_ostracods':
+            return transforms.Compose([
+                # transforms.Resize(256),
+                transforms.Resize([224, 224]),
                 transforms.ToTensor(),
                 transforms.Normalize(mean_, std_)
             ])
@@ -147,7 +173,7 @@ def five_cut_transform(dataname, crop_ratio=0.8):
     if dataname == 'cifar-100n':
         dataname = 'cifar-100'
     mean_, std_, crop_size_ = mean[dataname], std[dataname], crop_size[dataname]
-    if dataname == 'clothing1m':
+    if dataname == 'clothing1m' or dataname == 'noisy_ostracods':
         return transforms.Compose([
             transforms.Resize(crop_size_),
             transforms.FiveCrop(int(crop_size_ * crop_ratio)),
@@ -184,6 +210,10 @@ def get_origin_datasets(dataname, transform, data_root):
         ordinary_train_dataset = Clothing1M(root=data_root, train=True, transform=transform)
         test_dataset = Clothing1M(root=data_root, train=False, transform=transform)
         num_classes = 14
+    elif dataname == 'noisy_ostracods':
+        ordinary_train_dataset = Noisy_ostracods(root=data_root, train='train', transform=transform)
+        test_dataset = Noisy_ostracods(root=data_root, train='test', transform=transform)
+        num_classes = 79
     else:
         raise ValueError('Invalid dataset')
     return ordinary_train_dataset, test_dataset, num_classes
