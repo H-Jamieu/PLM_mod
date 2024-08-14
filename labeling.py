@@ -72,7 +72,9 @@ def prenp(args, paths, noise_labels):
                                                  persistent_workers=True)
 
     test_loader = torch.utils.data.DataLoader(dataset=test_dataset, batch_size=args.bs, shuffle=False,
-                                              num_workers=args.num_workers, pin_memory=True, persistent_workers=True)
+                                              num_workers=args.num_workers,
+                                              pin_memory=True,
+                                              persistent_workers=True)
 
     # labeling
     labels_multi = np.zeros([len(ordinary_train_dataset), num_classes])
@@ -101,8 +103,7 @@ def prenp(args, paths, noise_labels):
                                               transformations=train_transform,
                                               indices=term_indices)
             train_loader = torch.utils.data.DataLoader(dataset=train_dataset, batch_size=args.bs, shuffle=True,
-                                                       num_workers=args.num_workers, pin_memory=True,
-                                                       persistent_workers=True)
+                                                       num_workers=args.num_workers)
         model.train()
         for images, labels, inds in train_loader:
             X = images.to(device, non_blocking=True)
@@ -128,6 +129,7 @@ def prenp(args, paths, noise_labels):
     best_model.eval()
     with torch.no_grad():
         for images, labels, inds in estimate_crop_dataloader:
+            #print(images.size())
             bs, ncrops, c, h, w = images.size()
             images = images.to(device, non_blocking=True)
             probs = best_model(images.view(-1, c, h, w))

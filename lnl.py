@@ -31,9 +31,9 @@ def main(args, paths):
     noise_labels = generate_noise_labels(train_labels=ordinary_train_dataset.targets,
                                          num_classes=num_classes,
                                          data_type=args.data_gen,
-                                         flip_rate=args.flip_rate,
+                                         flip_rate=0,
                                          seed=args.seed,
-                                         train_data=ordinary_train_dataset.data)
+                                         train_data=ordinary_train_dataset)
 
     # candidate
     print("----------------Labeling----------------")
@@ -41,32 +41,28 @@ def main(args, paths):
     train_candidate_labels = np.load(paths['multi_labels'])
     assert (train_candidate_labels.sum(1) > 0).all()
 
-    train_indices, val_indices = indices_split(len_dataset=len(ordinary_train_dataset),
-                                               seed=args.seed,
-                                               val_ratio=0.1)
+    # no need to split as explict validation set is used
+    # train_indices, val_indices = indices_split(len_dataset=len(ordinary_train_dataset),
+    #                                            seed=args.seed,
+    #                                            val_ratio=0.1)
+
+    # Refactor: Remove validation candidate labels, loss is calculated on ordinary labels
 
     # dataloadert
     test_loader = torch.utils.data.DataLoader(dataset=test_dataset, batch_size=args.bs, shuffle=False,
-                                              num_workers=args.num_workers, pin_memory=True, persistent_workers=True)
+                                              num_workers=args.num_workers)
 
-    val_dataset = get_cantar_dataset(dataset=ordinary_train_dataset,
-                                     candidate_labels=train_candidate_labels,
-                                     targets=noise_labels,
-                                     transformations=val_transform,
-                                     indices=val_indices,
-                                     return_index=True)
+    val_dataset = Noisy_ostracods(root=args.data_root, train='val', transform=val_transform)
     val_loader = torch.utils.data.DataLoader(dataset=val_dataset, batch_size=args.bs, shuffle=False,
-                                             num_workers=args.num_workers, pin_memory=True,
-                                             persistent_workers=True)
+                                             num_workers=args.num_workers, pin_memory=True, persistent_workers=True)
     train_dataset = get_cantar_dataset(dataset=ordinary_train_dataset,
                                        candidate_labels=train_candidate_labels,
                                        targets=noise_labels,
                                        transformations=train_transform,
-                                       indices=train_indices,
+                                       indices=None,
                                        return_index=True)
     train_loader = torch.utils.data.DataLoader(dataset=train_dataset, batch_size=args.bs, shuffle=True,
-                                               num_workers=args.num_workers, pin_memory=True,
-                                               persistent_workers=True, drop_last=True)
+                                               num_workers=args.num_workers, drop_last=True, pin_memory=True, persistent_workers=True)
 
     model = get_model(args.mo, num_classes=num_classes, fix_backbone=False)
     U_model = get_model(args.mo, num_classes=num_classes * num_classes, fix_backbone=False)
@@ -107,28 +103,6 @@ def main(args, paths):
     Tloss_val_best = 10000.0
     pre_acc_val = 0.0
     for epoch in range(args.pre_ep):
-        if args.ds == 'clothing1m':
-            sampled_indices = b_sampler.ind_unsampling()
-            term_indices = np.array(train_indices)[sampled_indices].tolist()
-            train_dataset = get_cantar_dataset(dataset=ordinary_train_dataset,
-                                               candidate_labels=train_candidate_labels,
-                                               targets=noise_labels,
-                                               transformations=val_transform,
-                                               indices=term_indices,
-                                               return_index=True)
-            train_loader = torch.utils.data.DataLoader(dataset=train_dataset, batch_size=args.bs, shuffle=True,
-                                                       num_workers=args.num_workers, pin_memory=True,
-                                                       persistent_workers=True)
-        if args.ds == 'noisy_ostracods':
-            train_dataset = get_cantar_dataset(dataset=ordinary_train_dataset,
-                                               candidate_labels=train_candidate_labels,
-                                               targets=noise_labels,
-                                               transformations=val_transform,
-                                               indices=None,
-                                               return_index=True)
-            train_loader = torch.utils.data.DataLoader(dataset=train_dataset, batch_size=args.bs, shuffle=True,
-                                                       num_workers=args.num_workers, pin_memory=True,
-                                                       persistent_workers=True)
         U_model.train()
         model.train()
         for images, candidate_labels, noise_targets, indices in train_loader:
@@ -161,7 +135,7 @@ def main(args, paths):
         with torch.no_grad():
             loss_val = 0.0
             acc_val = 0.0
-            for images, candidate_labels, noise_targets, indices in val_loader:
+            for images, noise_targets in val_loader:
                 images = images.to(device, non_blocking=True)
                 noise_targets = noise_targets.to(device, non_blocking=True)
                 candidate_labels = candidate_labels.to(device, non_blocking=True)
@@ -174,15 +148,16 @@ def main(args, paths):
                 _, preds = torch.max(p_tilde.data, 1)
                 acc_val += (preds == noise_targets).sum().item()
 
-                U = U_model(images)
-                U = U.view(U.size(0), num_classes, num_classes)
-                U = torch.sigmoid(U)
-                U = U.float()
-                p_can = torch.matmul(p_tilde.unsqueeze(1), U)
-                p_can = p_can.squeeze(1)
-                p_can = torch.clamp(p_can, min=0, max=1)
-                l2 = F.binary_cross_entropy(p_can, candidate_labels.float())
-                loss = 0.5 * (l1 + l2)
+                # As the candidate labels are not used in the validation set, the following code is commented
+                # U = U_model(images)
+                # U = U.view(U.size(0), num_classes, num_classes)
+                # U = torch.sigmoid(U)
+                # U = U.float()
+                # p_can = torch.matmul(p_tilde.unsqueeze(1), U)
+                # p_can = p_can.squeeze(1)
+                # p_can = torch.clamp(p_can, min=0, max=1)
+                # l2 = F.binary_cross_entropy(p_can, candidate_labels.float())
+                loss = l1
                 loss_val += loss * len(noise_targets)
 
             loss_val = loss_val / len(val_dataset)
@@ -193,7 +168,7 @@ def main(args, paths):
                 best_U_model = deepcopy(U_model)
                 print('Epoch: {}. Best_loss_val: {}.'.format(epoch, loss_val))
 
-        if epoch == 10:
+        if epoch == 10: #why?
             Tloss_val_best = 10000.0
             for param in model.parameters():
                 param.requires_grad = True
@@ -232,28 +207,6 @@ def main(args, paths):
     # train
     val_acc_best = 0.0
     for epoch in range(args.ep):
-        if args.ds == 'clothing1m':
-            sampled_indices = b_sampler.ind_unsampling()
-            term_indices = np.array(train_indices)[sampled_indices].tolist()
-            train_dataset = get_cantar_dataset(dataset=ordinary_train_dataset,
-                                               candidate_labels=train_candidate_labels,
-                                               targets=noise_labels,
-                                               transformations=val_transform,
-                                               indices=term_indices,
-                                               return_index=True)
-            train_loader = torch.utils.data.DataLoader(dataset=train_dataset, batch_size=args.bs, shuffle=True,
-                                                       num_workers=args.num_workers, pin_memory=True,
-                                                       persistent_workers=True)
-        if args.ds == 'noisy_ostracods':
-            train_dataset = get_cantar_dataset(dataset=ordinary_train_dataset,
-                                               candidate_labels=train_candidate_labels,
-                                               targets=noise_labels,
-                                               transformations=val_transform,
-                                               indices=None,
-                                               return_index=True)
-            train_loader = torch.utils.data.DataLoader(dataset=train_dataset, batch_size=args.bs, shuffle=True,
-                                                       num_workers=args.num_workers, pin_memory=True,
-                                                       persistent_workers=True)
         model.train()
         for images, candidate_labels, noise_targets, indices in train_loader:
             images = images.to(device, non_blocking=True)
@@ -285,7 +238,7 @@ def main(args, paths):
 
         with torch.no_grad():
             acc_val = 0.0
-            for images, candidate_labels, noise_targets, indices in val_loader:
+            for images, noise_targets in val_loader:
                 images = images.to(device, non_blocking=True)
                 noise_targets = noise_targets.to(device, non_blocking=True)
 
@@ -303,6 +256,8 @@ def main(args, paths):
                 print('Epoch: {}. Best_ACC: {}.'.format(epoch, test_accuracy_best))
     torch.save(best_model.state_dict(), paths['best_model'])
     torch.save(best_U_model.state_dict(), paths['U_model'])
+    # model selection may not work as we fixed the validation set
+    torch.save(model.state_dict(), 'final_model.pth')
     print("Test ACC:", test_accuracy_best)
     print("Test Final:", accuracy_check(loader=test_loader, model=model, device=device))
 
@@ -382,12 +337,12 @@ if __name__ == '__main__':
         args.filter_outlier = True
         args.anchors_per_class = 10
     
-    if args.ds == 'Noisy_ostracods':
-        args.bs = 256
-        args.lr = 0.0256
+    if args.ds == 'noisy_ostracods':
+        args.bs = 128
+        args.lr = 0.01
         args.wd = 1e-3
-        args.ep = 15
-        args.pre_ep = 15
+        args.ep = 50
+        args.pre_ep = 50
         args.crop_ratio = 0.7
         args.mo = 'resnet50'
         args.filter_outlier = True

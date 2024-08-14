@@ -87,7 +87,7 @@ def init_gpuseed(seed, device, benchmark=True, deterministic=True):
 
 
 def get_scheduler(dataname, optimizer, ep):
-    if dataname == 'clothing1m':
+    if dataname == 'clothing1m' or dataname == 'noisy_ostracods':
         return MultiStepLR(optimizer, milestones=[5, 10, 15], gamma=0.1)  ######
     elif dataname == 'cifar-100':
         return MultiStepLR(optimizer, milestones=[40], gamma=0.01)

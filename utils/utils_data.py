@@ -174,6 +174,7 @@ def five_cut_transform(dataname, crop_ratio=0.8):
         dataname = 'cifar-100'
     mean_, std_, crop_size_ = mean[dataname], std[dataname], crop_size[dataname]
     if dataname == 'clothing1m' or dataname == 'noisy_ostracods':
+        print('five_crop')
         return transforms.Compose([
             transforms.Resize(crop_size_),
             transforms.FiveCrop(int(crop_size_ * crop_ratio)),
@@ -183,7 +184,9 @@ def five_cut_transform(dataname, crop_ratio=0.8):
                 lambda crops: torch.stack([transforms.Normalize(mean_, std_)(crop) for crop in crops])),
         ])
     else:
+        print('five_crop')
         return transforms.Compose([
+            transforms.Resize(crop_size_),
             transforms.FiveCrop(int(crop_size_ * crop_ratio)),
             transforms.Lambda(lambda crops: torch.stack([transforms.ToTensor()(crop) for crop in crops])),
             transforms.Lambda(lambda crops: torch.stack([transforms.Resize(crop_size_)(crop) for crop in crops])),
@@ -241,7 +244,7 @@ def indices_split(len_dataset, seed, val_ratio=None, split_group=None):
 def get_noise_dataset(dataset, noise_labels, transformations, indices=None):
     if indices is None:
         indices = list(range(len(dataset)))
-    dset = NoiseDataset(data=dataset.data[indices],
+    dset = NoiseDataset(data=dataset,
                         noise_tar=noise_labels[indices],
                         transform=transformations)
     return dset
@@ -252,8 +255,8 @@ def get_cantar_dataset(dataset, candidate_labels, transformations, targets=None,
         targets = np.array(dataset.targets)
     if indices is None:
         indices = list(range(len(dataset)))
-        dset = CandidateDateset(dataset.data[indices].squeeze(), candidate_labels[indices].squeeze(),
-                                targets[indices].squeeze(), transformations, return_index)
+        dset = CandidateDateset(dataset, candidate_labels,
+                                targets, transformations, return_index)
     else:
         dset = CandidateDateset(dataset.data[indices], candidate_labels[indices], targets[indices], transformations,
                                 return_index)

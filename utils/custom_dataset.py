@@ -4,23 +4,21 @@ import numpy as np
 
 
 class NoiseDataset(Dataset):
+    # very redundant, refactor later
     def __init__(self, data, noise_tar, transform=None):
         self.data = data
         self.noise_tar = noise_tar
         self.transform = transform
 
     def __len__(self):
-        return len(self.data)
+        return len(self.data.img_labels)
 
     def __getitem__(self, index):
-        img, noise_tar = self.data[index], self.noise_tar[index]
-
-        # doing this so that it is consistent with all other datasets
-        # to return a PIL Image
-        img = Image.fromarray(np.array(img))
-        # img = Image.fromarray(np.array(img), mode = 'L') # mnist
+        img, noise_tar = self.data.get_plain_item(index)
         if self.transform is not None:
             img = self.transform(img)
+        else:
+            img, noise_tar = self.data.__getitem__(index)
         return img, noise_tar, index
 
 
@@ -60,10 +58,8 @@ class CandidateDateset(Dataset):
         return len(self.data)
 
     def __getitem__(self, index):
-        img, target, can_label = self.data[index], self.targets[index], self.can_labels[index]
-        img = Image.fromarray(np.array(img))
-        if self.transform is not None:
-            img = self.transform(img)
+        img, target= self.data.__getitem__(index)
+        can_label = self.can_labels[index]
         if self.return_index:
             return img, can_label, target, index
         return img, can_label, target
