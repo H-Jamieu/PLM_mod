@@ -285,8 +285,8 @@ if __name__ == '__main__':
                         choices=['symmetry', 'pair', 'idn'],
                         type=str, required=False)
     parser.add_argument('--gpu', help='used gpu id', default='0', type=str, required=False)
-    parser.add_argument('--flip_rate', help='noise flip rate', type=float, default=0.4, required=False)
-    parser.add_argument('--seed', help='Random seed', default=40, type=int, required=False)
+    parser.add_argument('--flip_rate', help='noise flip rate', type=float, default=0, required=False)
+    parser.add_argument('--seed', help='Random seed', default=2024, type=int, required=False)
     parser.add_argument('--crop_ratio', help='crop ratio', type=float, default=0.8, required=False)
     parser.add_argument('--save_dir', help='results dir', default='./res', type=str, required=False)
     parser.add_argument('--data_root', help='data dir', default='~/data', type=str, required=False)
@@ -338,14 +338,14 @@ if __name__ == '__main__':
         args.anchors_per_class = 10
     
     if args.ds == 'noisy_ostracods':
-        args.bs = 128
-        args.lr = 0.01
+        args.bs = 96
+        args.lr = 0.0096
         args.wd = 1e-3
         args.ep = 50
         args.pre_ep = 50
         args.crop_ratio = 0.7
         args.mo = 'resnet50'
-        args.filter_outlier = True
+        args.filter_outlier = False
         # as noisy ostracods may have classes with only one sample, we set anchors_per_class to 1
         args.anchors_per_class = 1
 
